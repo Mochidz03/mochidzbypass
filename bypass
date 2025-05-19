@@ -1,0 +1,114 @@
+(async function() {
+    'use strict';
+
+    // Cấu hình
+    const yeumoneyDomain = 'yeumoney.com'; // Tên miền Yeumoney
+    const verificationDomains = {
+        '188BET': 'https://165.22.63.250/',
+        'M88': 'https://bet88bi.com/',
+        'W88': 'https://188.166.185.213/'
+    };
+    const waitTime = 75 * 1000; // 75 giây
+    const maxRetries = 3; // Số lần thử lại
+    const randomDelay = () => Math.random() * 2000 + 500; // Độ trễ ngẫu nhiên 500-2500ms
+
+    // Kiểm tra xem có phải trang Yeumoney không
+    function isYeumoneyPage() {
+        return window.location.hostname.includes(yeumoneyDomain);
+    }
+
+    // Chờ phần tử trong DOM
+    async function waitForElement(selector, timeout = 15000) {
+        return new Promise((resolve, reject) => {
+            const element = document.querySelector(selector);
+            if (element) return resolve(element);
+
+            const observer = new MutationObserver(() => {
+                const target = document.querySelector(selector);
+                if (target) {
+                    observer.disconnect();
+                    resolve(target);
+                }
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+
+            setTimeout(() => {
+                observer.disconnect();
+                reject(new Error(`Không tìm thấy ${selector} trong ${timeout}ms`));
+            }, timeout);
+        });
+    }
+
+    // Mô phỏng nhập liệu
+    function simulateInput(element, value) {
+        element.value = value;
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    // Lấy mã từ trang xác nhận
+    async function fetchCode(verifyUrl) {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: verifyUrl,
+                onload: response => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(response.responseText, 'text/html');
+                    const codeElement = doc.querySelector('input[name="code"], #code'); // Thay bằng selector thực tế
+                    if (codeElement && codeElement.value) {
+                        resolve(codeElement.value.trim());
+                    } else {
+                        reject(new Error('Không tìm thấy mã'));
+                    }
+                },
+                onerror: () => reject(new Error('Lỗi khi lấy mã'))
+            });
+        });
+    }
+
+    // Logic vượt link
+    async function bypassYeumoney() {
+        if (!isYeumoneyPage()) return;
+
+        try {
+            // Bước 1: Chờ nút "Lấy mã" hoặc trang tải
+            const getCodeButton = await waitForElement('button:contains("Lấy mã"), #get-code');
+            getCodeButton.click();
+            await new Promise(resolve => setTimeout(resolve, randomDelay()));
+
+            // Bước 2: Xác định trang xác nhận dựa trên nội dung
+            const platform = await waitForElement('span:contains("188BET"), span:contains("M88"), span:contains("W88")');
+            const platformName = platform.textContent.trim();
+            const verifyUrl = verificationDomains[platformName] || Object.values(verificationDomains)[0];
+            window.location.href = verifyUrl;
+            await new Promise(resolve => setTimeout(resolve, waitTime + randomDelay()));
+
+            // Bước 3: Lấy mã từ trang xác nhận
+            const code = await fetchCode(verifyUrl);
+
+            // Bước 4: Quay lại trang Yeumoney và nhập mã
+            window.history.back();
+            await new Promise(resolve => setTimeout(resolve, randomDelay()));
+            const codeInput = await waitForElement('input[name="code"], #code-input');
+            simulateInput(codeInput, code);
+
+            // Bước 5: Nhấn xác nhận
+            const submitButton = await waitForElement('button:contains("Xác nhận"), #submit-btn');
+            submitButton.click();
+            await new Promise(resolve => setTimeout(resolve, randomDelay()));
+
+            // Bước 6: Chờ và chuyển đến trang đích
+            const finalLink = await waitForElement('a[href*="final"], #final-link');
+            window.location.href = finalLink.href;
+        } catch (error) {
+            console.error('Lỗi vượt link:', error);
+        }
+    }
+
+    // Chạy script
+    if (document.readyState === 'complete') {
+        bypassYeumoney();
+    } else {
+        window.addEventListener('load', bypassYeumoney);
+    }
+})();
