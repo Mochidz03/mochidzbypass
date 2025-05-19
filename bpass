@@ -1,0 +1,213 @@
+(async function() {
+    'use strict';
+
+    console.log('Script started on:', window.location.href);
+
+    // Cấu hình
+    const yeumoneyDomain = 'yeumoney.com';
+    const verificationDomains = {
+        '188BET': {
+            url: 'https://165.22.63.250/',
+            waitTime: 55 * 1000,
+            articleUrl: 'https://165.22.63.250/soi-keo-real-madrid-vs-rb-leipzig-07-03-2024/',
+            codeWaitTime: 25 * 1000
+        },
+        'M88': {
+            url: 'https://bet88bi.com/',
+            waitTime: 60 * 1000,
+            articleUrl: 'https://bet88bi.com/chien-thuat-1-3-2-6-trong-baccarat/',
+            codeWaitTime: 30 * 1000
+        },
+        'W88': {
+            url: 'https://188.166.185.213/',
+            waitTime: 60 * 1000,
+            articleUrl: 'https://188.166.185.213/top-game-slot-gpi-pho-bien/',
+            codeWaitTime: 30 * 1000
+        }
+    };
+    const processingWaitTime = 75 * 1000;
+    const randomDelay = () => Math.random() * 2000 + 500;
+
+    // Mô phỏng hành vi người dùng
+    function simulateUserBehavior() {
+        window.scrollBy(0, Math.random() * 100 + 50);
+        console.log('Simulating user scroll');
+    }
+
+    // Kiểm tra trang
+    function isYeumoneyPage() {
+        console.log('Checking domain:', window.location.hostname);
+        return window.location.hostname.includes(yeumoneyDomain);
+    }
+
+    function isVerificationPage() {
+        return Object.values(verificationDomains).some(domain => window.location.href.includes(domain.url));
+    }
+
+    function isArticlePage() {
+        return Object.values(verificationDomains).some(domain => window.location.href === domain.articleUrl);
+    }
+
+    // Chờ phần tử
+    async function waitForElement(selector, timeout = 15000) {
+        console.log(`Waiting for ${selector}`);
+        return new Promise((resolve, reject) => {
+            const element = document.querySelector(selector);
+            if (element) {
+                console.log(`Found ${selector}`);
+                return resolve(element);
+            }
+
+            const observer = new MutationObserver(() => {
+                const target = document.querySelector(selector);
+                if (target) {
+                    console.log(`Found ${selector} after mutation`);
+                    observer.disconnect();
+                    resolve(target);
+                }
+            });
+            observer.observe(document.body, { childList: true, subtree: true });
+
+            setTimeout(() => {
+                console.error(`Timeout waiting for ${selector}`);
+                reject(new Error(`Không tìm thấy ${selector} trong ${timeout}ms`));
+            }, timeout);
+        });
+    }
+
+    // Mô phỏng hành động
+    function simulateInput(element, value) {
+        element.value = value;
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function simulateClick(element) {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    }
+
+    // Lấy mã từ bài viết
+    async function getCodeFromArticlePage() {
+        try {
+            console.log('Looking for get code button on article page');
+            const getCodeButton = await waitForElement('a:contains("Lấy mã"), #get-code-btn');
+            simulateClick(getCodeButton);
+
+            const domain = Object.keys(verificationDomains).find(key => window.location.href.includes(verificationDomains[key].articleUrl));
+            const codeWaitTime = verificationDomains[domain].codeWaitTime;
+            console.log(`Waiting ${codeWaitTime / 1000}s for code`);
+            await new Promise(resolve => setTimeout(resolve, codeWaitTime + randomDelay()));
+            const codeElement = await waitForElement('input[name="code"], #code, .code');
+            const code = codeElement.value || codeElement.textContent.trim();
+            if (code) {
+                GM_setValue('verificationCode', code);
+                console.log('Code found:', code);
+                window.close();
+            } else {
+                throw new Error('Không tìm thấy mã');
+            }
+        } catch (error) {
+            console.error('Lỗi lấy mã:', error);
+            window.close();
+        }
+    }
+
+    // Xử lý trang xác nhận
+    async function handleVerificationPage() {
+        try {
+            console.log('Processing verification page');
+            const domain = Object.keys(verificationDomains).find(key => window.location.href.includes(verificationDomains[key].url));
+            const waitTime = verificationDomains[domain].waitTime;
+            const articleUrl = verificationDomains[domain].articleUrl;
+            console.log(`Waiting ${waitTime / 1000}s`);
+            simulateUserBehavior();
+            await new Promise(resolve => setTimeout(resolve, waitTime + randomDelay()));
+            const articleLink = await waitForElement(`a[href="${articleUrl}"]`);
+            simulateClick(articleLink);
+        } catch (error) {
+            console.error('Lỗi xử lý trang xác nhận:', error);
+            window.close();
+        }
+    }
+
+    // Logic chính
+    async function bypassYeumoney() {
+        if (isArticlePage()) {
+            console.log('On article page');
+            await getCodeFromArticlePage();
+            return;
+        }
+        if (isVerificationPage()) {
+            console.log('On verification page');
+            await handleVerificationPage();
+            return;
+        }
+        if (!isYeumoneyPage()) {
+            console.log('Not a Yeumoney page');
+            return;
+        }
+
+        console.log('Starting bypass on Yeumoney');
+        try {
+            simulateUserBehavior();
+            const getCodeButton = await waitForElement('button:contains("Lấy mã"), #get-code-btn');
+            console.log('Found get code button');
+            simulateClick(getCodeButton);
+            await new Promise(resolve => setTimeout(resolve, randomDelay()));
+
+            const processingMessage = await waitForElement('div:contains("Đang xử lý! Vui lòng đợi 75 giây...")', 5000);
+            if (processingMessage) {
+                console.log('Found processing message, waiting 75s');
+                simulateUserBehavior();
+                await new Promise(resolve => setTimeout(resolve, processingWaitTime + randomDelay()));
+            }
+
+            const platformElement = await waitForElement('span:contains("188BET"), span:contains("M88"), span:contains("W88")');
+            const platform = platformElement.textContent.trim();
+            console.log('Detected platform:', platform);
+            const verifyUrl = verificationDomains[platform].url;
+            if (!verifyUrl) throw new Error('Không tìm thấy URL xác nhận');
+
+            window.open(verifyUrl, '_blank');
+            console.log('Opened verification tab:', verifyUrl);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            let attempts = 0;
+            let code = GM_getValue('verificationCode', '');
+            while (!code && attempts < 5) {
+                console.log(`Attempt ${attempts + 1} to get code`);
+                await new Promise(resolve => setTimeout(resolve, 10000));
+                code = GM_getValue('verificationCode', '');
+                attempts++;
+            }
+            if (!code) throw new Error('Không lấy được mã');
+
+            const codeInput = await waitForElement('input[name="code"], #code-input, input[type="text"]');
+            console.log('Found code input, entering code');
+            simulateInput(codeInput, code);
+            await new Promise(resolve => setTimeout(resolve, randomDelay()));
+
+            const confirmButton = await waitForElement('button:contains("Xác nhận"), #confirm-btn');
+            console.log('Found confirm button');
+            simulateClick(confirmButton);
+            await new Promise(resolve => setTimeout(resolve, randomDelay()));
+
+            const finalLink = await waitForElement('a[href*="final"], a:not([href*="javascript"])');
+            console.log('Found final link, redirecting');
+            window.location.href = finalLink.href;
+        } catch (error) {
+            console.error('Lỗi vượt link:', error);
+        }
+    }
+
+    // Chạy script
+    if (document.readyState === 'complete') {
+        console.log('Document ready, starting bypass');
+        bypassYeumoney();
+    } else {
+        window.addEventListener('load', () => {
+            console.log('Window loaded, starting bypass');
+            bypassYeumoney();
+        });
+    }
+})();
